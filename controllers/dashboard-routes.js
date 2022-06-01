@@ -1,117 +1,62 @@
-const router = require('express').Router();
-const Auth = require('../utils/auth.js');
-const sequelize = require('../config/connection.js');
-const { Post, User, Comment } = require('../models');
+const router = require('express').Router()
+const sequelize = require('../config/connection')
+const { Post, User, Comment } = require('../models')
+const withAuth = require('../utils/auth')
 
-router.get('/', Auth, (req, res) => {
-    // All of the users posts are obtained from the database
-    Post.findAll({
-      where: {
-        // use the ID from the session
-        user_id: req.session.user_id
-      },
-      attributes: [
-        'id',
-        'post_content',
-        'title',
-        'created_at',
-      ],
-      include: [
-        {
-          model: Comment,
-          attributes: ['id', 'comment_text', 'post_id', 'user_id', 'created_at'],
-          include: {
-            model: User,
-            attributes: ['username']
-          }
-        },
-        {
-          model: User,
-          attributes: ['username']
-        }
-      ]
-    })
-      .then(dbPostData => {
-        // serialize data before passing to template
-        const posts = dbPostData.map(post => post.get({ plain: true }));
-        res.render('dashboard', { posts, loggedIn: true });
-      })
-      .catch(err => {
-        console.log(err);
-        res.status(500).json(err);
-      });
-  });
-
-// A route to edit a post
-router.get('/edit/:id', Auth, (req, res) => {
-  // All of the users posts are obtained from the database
-  Post.findOne({
-    where: {
-      id: req.params.id
-    },
-    attributes: [
-      'id',
-      'post_content',
-      'title',
-      'created_at',
-    ],
-    include: [
-      {
-        model: Comment,
-        attributes: ['id', 'comment_text', 'post_id', 'user_id', 'created_at'],
-        include: {
-          model: User,
-          attributes: ['username']
-        }
-      },
-      {
-        model: User,
-        attributes: ['username']
-      }
-    ]
-  })
-    .then(dbPostData => {
-      // if no post by that id exists, return an error
-      if (!dbPostData) {
-        res.status(404).json({ message: 'No post found with this id' });
-        return;
-      }
-      // serialize data before passing to template
-      const post = dbPostData.get({ plain: true });
-      res.render('edit-post', { post, loggedIn: true });
-    })
-    .catch(err => {
-      console.log(err);
-      res.status(500).json(err);
-    });
-});
-
-// A route to edit the logged in user
-router.get('/edituser', Auth, (req, res) => {
-  // Acess the User model and run the findOne() method to get a single user based on parameters
-  User.findOne({
-    // when the data is sent back, exclude the password property
-    attributes: { exclude: ['password'] },
-    where: {
-      // use id as the parameter for the request
-      id: req.session.user_id
+router.get('/', withAuth, async (req, res) => {
+    try {
+        console.log(req.session);
+        console.log('======================');
+        const dbPostData = await Post.findAll({
+            where: {   
+                user_id: req.session.user_id
+            },
+            attributes: ['id', 'title', 'post_content', 'created_at'],
+            include: [
+                {
+                    model: Comment,
+                    attributes: ['id', 'comment_text', 'post_id', 'user_id', 'created_at'],
+                    include: {
+                        model: User,
+                        attributes: ['username']
+                    }
+                },
+                {
+                    model: User,
+                    attributes: ['username']
+                }
+            ]
+        })
+        const posts = dbPostData.map(post => post.get({ plain: true }))
+        console.log('SECOND', req.session)
+        res.render('dashboard', { posts, loggedIn: true })
+    } catch (err) {
+        console.log(err)
+        res.status(500).json(err)
     }
-  })
-    .then(dbUserData => {
-      if (!dbUserData) {
-        // if no user is found, return an error
-        res.status(404).json({ message: 'No user found with this id' });
-        return;
-      }
-      // otherwise, return the data for the requested user
-      const user = dbUserData.get({ plain: true });
-      res.render('edit-user', {user, loggedIn: true});
-    })
-    .catch(err => {
-      // if there is a server error, return that error
-      console.log(err);
-      res.status(500).json(err);
-    })
-  });
+})
 
-module.exports = router;
+router.get('/edit/:id', withAuth, async (req, res) => {
+    try {
+        const dbPostData = await Post.findByPk(req.params.id, {
+            attributes: ['id', 'title', 'post_content']
+        })
+        const post = dbPostData.get({ plain: true })
+        console.log('===EDIT===', post)
+        res.status(200).render('edit-post', { post, loggedIn: true })
+    } catch (err) {
+        console.log(err)
+        res.status(500).json(err)
+    }
+})
+
+router.get('/new-post', withAuth, async (req, res) => {
+    try {
+        res.render('new-post', { loggedIn: true })
+    } catch (err) {
+        console.error(err)
+        res.status(500).json(err)
+    }
+})
+
+module.exports = router
